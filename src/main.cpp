@@ -11,14 +11,17 @@ int main() {
         return 1;
     }
 
-    std::cout << "Rows (days): " << prices.size() << std::endl;
-    std::cout << "Columns (assets): " << prices[0].size() << std::endl;
+    auto returns = Statistics::computeReturns(prices);
 
-    std::cout << "First row values: ";
-    for (double v : prices[0]) {
-        std::cout << v << " ";
+    std::cout << "Return rows: " << returns.size() << std::endl;
+    std::cout << "Return cols: " << returns[0].size() << std::endl;
+
+    std::cout << "First return row: ";
+    for (double x : returns[0]) {
+        std::cout << x << " ";
     }
     std::cout << std::endl;
+
 
     return 0;
 }

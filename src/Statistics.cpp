@@ -1,48 +1,45 @@
-//
-// Created by ANIMESH on 14-01-2026.
-//
-
 #include "Statistics.h"
 #include <fstream>
 #include <iostream>
 #include <sstream>
+
 using namespace std;
 
-std::vector<std::vector<double> > Statistics::readCSV(const std::string &filePath) {
-    std::ifstream file(filePath);
-    std::vector<std::vector<double>> prices;
+vector<vector<double>> Statistics::readCSV(const string& filePath) {
+    ifstream file(filePath);
+    vector<vector<double>> prices;
 
     if (!file.is_open()) {
-        std::cerr << "Error opening CSV file" << std::endl;
+        cerr << "Error opening CSV file" << endl;
         return prices;
     }
 
-    std:: string line;
+    string line;
 
-    if (!std::getline(file,line)) {
-        std::cerr << "Error reading CSV file" << std::endl;
+    // Skip header
+    if (!getline(file, line)) {
+        cerr << "Error reading CSV file" << endl;
         return prices;
     }
 
-    while (std::getline(file, line)) {
-        std::stringstream ss(line);
-        std::string token;
-        std::vector<double> row;
+    while (getline(file, line)) {
+        stringstream ss(line);
+        string token;
+        vector<double> row;
 
         bool isFirstColumn = true;
 
-        while (std::getline(ss, token, ',')) {
+        while (getline(ss, token, ',')) {
             if (isFirstColumn) {
                 isFirstColumn = false;
                 continue;
             }
 
             try {
-                row.push_back(std::stol(token));
-            }
-            catch (...) {
-                std::cerr << "Error reading numeric value in CSV file" << std::endl;
-                return std::vector<std::vector<double>>();
+                row.push_back(stod(token));   // ✅ FIXED
+            } catch (...) {
+                cerr << "Error reading numeric value in CSV file" << endl;
+                return {};
             }
         }
 
@@ -51,6 +48,29 @@ std::vector<std::vector<double> > Statistics::readCSV(const std::string &filePat
         }
     }
 
-    file.close();
     return prices;
+}
+
+vector<vector<double>>
+Statistics::computeReturns(const vector<vector<double>>& prices) {
+
+    if (prices.size() < 2) return {};
+
+    int n = prices.size();
+    int m = prices[0].size();
+
+    vector<vector<double>> returns(n - 1, vector<double>(m));
+
+    for (int i = 1; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            if (prices[i - 1][j] == 0.0) {
+                returns[i - 1][j] = 0.0;
+            } else {
+                returns[i - 1][j] =
+                    (prices[i][j] - prices[i - 1][j]) / prices[i - 1][j];
+            }
+        }
+    }
+
+    return returns;
 }
