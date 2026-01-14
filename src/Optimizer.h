@@ -1,0 +1,13 @@
+//
+// Created by ANIMESH on 14-01-2026.
+//
+
+#ifndef PORTFOLIOOPTIMIZER_OPTIMIZER_H
+#define PORTFOLIOOPTIMIZER_OPTIMIZER_H
+
+
+class Optimizer {
+};
+
+
+#endif //PORTFOLIOOPTIMIZER_OPTIMIZER_H
