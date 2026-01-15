@@ -5,9 +5,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(PortfolioOptimizer
-        src/main.cpp
-        src/Matrix.cpp
-        src/Statistics.cpp
-        src/Optimizer.cpp
+        backend/src/main.cpp
+        backend/src/Matrix.cpp
+        backend/src/Statistics.cpp
+        backend/src/Optimizer.cpp
 )
 
