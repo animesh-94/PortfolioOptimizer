@@ -1,116 +1,109 @@
 #include "Statistics.h"
 #include <fstream>
-#include <iostream>
 #include <sstream>
+#include <iostream>
 
-using namespace std;
-
-vector<vector<double>> Statistics::readCSV(const string& filePath) {
-    ifstream file(filePath);
-    vector<vector<double>> prices;
+std::vector<std::vector<double>>
+Statistics::readCSV(const std::string& filePath) {
+    std::ifstream file(filePath);
+    std::vector<std::vector<double>> prices;
 
     if (!file.is_open()) {
-        cerr << "Error opening CSV file" << endl;
-        return prices;
+        std::cerr << "Error opening CSV file\n";
+        return {};
     }
 
-    string line;
+    std::string line;
 
-    // Skip header
-    if (!getline(file, line)) {
-        cerr << "Error reading CSV file" << endl;
-        return prices;
+    // skip header
+    if (!std::getline(file, line)) {
+        return {};
     }
 
-    while (getline(file, line)) {
-        stringstream ss(line);
-        string token;
-        vector<double> row;
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string token;
+        std::vector<double> row;
 
-        bool isFirstColumn = true;
-
-        while (getline(ss, token, ',')) {
-            if (isFirstColumn) {
-                isFirstColumn = false;
+        bool skipFirst = true;
+        while (std::getline(ss, token, ',')) {
+            if (skipFirst) {
+                skipFirst = false;
                 continue;
             }
-
-            try {
-                row.push_back(stod(token));   // ✅ FIXED
-            } catch (...) {
-                cerr << "Error reading numeric value in CSV file" << endl;
-                return {};
-            }
+            row.push_back(std::stod(token));
         }
 
-        if (!row.empty()) {
+        if (!row.empty())
             prices.push_back(row);
-        }
     }
 
     return prices;
 }
 
-vector<vector<double>>
-Statistics::computeReturns(const vector<vector<double>>& prices) {
-
+std::vector<std::vector<double>>
+Statistics::computeReturns(const std::vector<std::vector<double>>& prices) {
     if (prices.size() < 2) return {};
 
-    int n = prices.size();
-    int m = prices[0].size();
+    int T = prices.size();
+    int N = prices[0].size();
 
-    vector<vector<double>> returns(n - 1, vector<double>(m));
+    std::vector<std::vector<double>> returns(T - 1,
+        std::vector<double>(N));
 
-    for (int i = 1; i < n; i++) {
-        for (int j = 0; j < m; j++) {
-            if (prices[i - 1][j] == 0.0) {
-                returns[i - 1][j] = 0.0;
-            } else {
-                returns[i - 1][j] =
-                    (prices[i][j] - prices[i - 1][j]) / prices[i - 1][j];
-            }
+    for (int t = 1; t < T; t++) {
+        for (int i = 0; i < N; i++) {
+            returns[t - 1][i] =
+                (prices[t][i] - prices[t - 1][i]) / prices[t - 1][i];
         }
     }
 
     return returns;
 }
 
-std::vector<double> Statistics::computeReturnsMean(const std::vector<std::vector<double> > &returns) {
-    int  n = returns.size();
-    int m = returns[0].size();
+std::vector<double>
+Statistics::computeReturnsMean(
+    const std::vector<std::vector<double>>& returns) {
 
-    vector<double> means(m, 0.0);
-    for (int j=0; j<m; j++) {
-        double individual_mean = 0.0;
-        for (int i=0; i<n; i++) {
-            individual_mean += returns[i][j];
-        }
+    if (returns.empty() || returns[0].empty()) return {};
 
-        means[j] = individual_mean/n;
+    int T = returns.size();
+    int N = returns[0].size();
+
+    std::vector<double> means(N, 0.0);
+
+    for (int i = 0; i < N; i++) {
+        for (int t = 0; t < T; t++)
+            means[i] += returns[t][i];
+        means[i] /= T;
     }
 
     return means;
 }
 
-std::vector<std::vector<double> > Statistics::computeCovariance(const std::vector<std::vector<double> > &returns, const std::vector<double> &means) {
+std::vector<std::vector<double>>
+Statistics::computeCovariance(
+    const std::vector<std::vector<double>>& returns,
+    const std::vector<double>& means) {
+
+    if (returns.size() < 2 || returns[0].empty()) return {};
+
     int T = returns.size();
     int N = returns[0].size();
 
-    if (T < 2) {
-        return {};
-    }
+    std::vector<std::vector<double>> cov(N,
+        std::vector<double>(N, 0.0));
 
-    std::vector<std::vector<double>> covariances(N, std::vector<double>(N));
-
-    for (int i=0; i<N; i++) {
-        for (int j=0; j<N; j++) {
-            double sum = 0.0;
-            for (int t=0; t<T; t++) {
-                sum += (returns[t][i] - means[i])*(returns[t][j] - means[j]);
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            for (int t = 0; t < T; t++) {
+                cov[i][j] +=
+                    (returns[t][i] - means[i]) *
+                    (returns[t][j] - means[j]);
             }
-            covariances[i][j] = sum/(T-1);
+            cov[i][j] /= (T - 1);
         }
     }
 
-    return covariances;
+    return cov;
 }

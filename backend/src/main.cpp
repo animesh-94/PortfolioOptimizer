@@ -1,108 +1,110 @@
 #include "Statistics.h"
 #include "Optimizer.h"
+#include "PortfolioExporter.h"
+#include "PortfolioMetrics.h"
+
 #include <iostream>
-#include <vector>
-#include <fstream>
-#include <cmath>
 
-void exportFrontierToJSON(
-    const std::string& filename,
-    const std::vector<std::pair<double, double>>& frontier
-) {
-    std::ofstream file(filename);
-    file << "{\n  \"efficient_frontier\": [\n";
-
-    for (size_t i = 0; i < frontier.size(); i++) {
-        file << "    { \"risk\": " << frontier[i].first
-             << ", \"return\": " << frontier[i].second << " }";
-
-        if (i + 1 < frontier.size()) file << ",";
-        file << "\n";
-    }
-
-    file << "  ]\n}\n";
-    file.close();
-}
-
-double portfolioVariance(
-    const std::vector<double>& w,
-    const std::vector<std::vector<double>>& cov) {
-
-    double var = 0.0;
-    int N = w.size();
-
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
-            var += w[i] * cov[i][j] * w[j];
-        }
-    }
-    return var;
-}
+#include "RiskMetrics.h"
 
 int main() {
 
-    auto prices = Statistics::readCSV("data/prices.csv");
+    auto prices =
+        Statistics::readCSV("../backend/data/prices.csv");
+    if (prices.empty()) return 1;
+
     auto returns = Statistics::computeReturns(prices);
-    std::cout << "\nRETURNS MATRIX:\n";
-    for (const auto& row : returns) {
-        for (double v : row) {
-            std::cout << v << " ";
-        }
-        std::cout << std::endl;
-    }
+    auto mu = Statistics::computeReturnsMean(returns);
+    auto cov = Statistics::computeCovariance(returns, mu);
+    if (cov.empty()) return 1;
 
-    auto meanReturns = Statistics::computeReturnsMean(returns);
-    std::cout << "\nMEAN RETURNS:\n";
-    for (double m : meanReturns) {
-        std::cout << m << " ";
-    }
-    std::cout << std::endl;
+    Optimizer opt;
 
-    auto cov = Statistics::computeCovariance(returns, meanReturns);
-    std::cout << "\nCOVARIANCE MATRIX:\n";
-    for (const auto& row : cov) {
-        for (double v : row) {
-            std::cout << v << " ";
-        }
-        std::cout << std::endl;
-    }
+    /* ---- Efficient Frontier ---- */
+    auto ef = opt.computeEfficientFrontier(mu, cov, 30);
 
+    /* ---- Tangency Portfolio ---- */
+    double rf = 0.001;
+    auto tp = opt.computeTangencyPortfolio(mu, cov, rf);
 
-    auto weights = Optimizer::minimizeVariance(cov);
+    std::cout << "\nTangency Portfolio:\n";
+    std::cout << "Return: " << tp.expectedReturn << "\n";
+    std::cout << "Risk: " << tp.risk << "\n";
 
-    double sum = 0.0;
-    for (double w : weights) sum += w;
-    std::cout << "Sum of weights: " << sum << std::endl;
+    // Risk Parity Portfolio
+    auto rp = opt.computeRiskParityPortfolio(mu, cov);
 
-    int N = weights.size();
-    std::vector<double> equalWeights(N, 1.0 / N);
-
-    std::cout << "Equal weight variance: "
-              << portfolioVariance(equalWeights, cov) << std::endl;
-
-    std::cout << "Optimized variance: "
-              << portfolioVariance(weights, cov) << std::endl;
-
-    std::cout << "\nOptimal Portfolio Weights\n";
-    for (int i = 0; i < weights.size(); i++) {
-        std::cout << "Asset " << i << ": " << weights[i] << std::endl;
-    }
-
-    Optimizer optimizer;
-
-    auto frontier =
-        optimizer.computeEfficientFrontier(meanReturns, cov, 20);
-
-    exportFrontierToJSON("efficient_frontier.json", frontier);
+    std::cout << "\nRisk Parity Portfolio:\n";
+    std::cout << "Return: " << rp.expectedReturn << "\n";
+    std::cout << "Risk: " << rp.risk << "\n";
 
 
+    /* ---- Capital Market Line ---- */
+    auto cml = opt.computeCapitalMarketLine(
+        rf,
+        tp.expectedReturn,
+        tp.risk,
+        30
+    );
 
-    std::cout << "\nEFFICIENT FRONTIER:\n";
-    for (auto& p : frontier) {
-        std::cout << "Risk: " << p.first
-                  << "  Return: " << p.second << "\n";
-    }
+    /* ---- Equal Weight Portfolio ---- */
+    int n = mu.size();
+    std::vector<double> equalWeights(n, 1.0 / n);
 
+    double eqReturn =
+        PortfolioMetrics::portfolioReturn(equalWeights, mu);
+    double eqRisk =
+        PortfolioMetrics::portfolioRisk(
+            PortfolioMetrics::portfolioVariance(equalWeights, cov));
+    double eqSharpe =
+        PortfolioMetrics::sharpeRatio(eqReturn, eqRisk, rf);
+
+    double tanSharpe =
+        PortfolioMetrics::sharpeRatio(
+            tp.expectedReturn,
+            tp.risk,
+            rf
+        );
+
+    std::cout << "\nSHARPE RATIOS\n";
+    std::cout << "Equal Weight: " << eqSharpe << "\n";
+    std::cout << "Tangency:     " << tanSharpe << "\n";
+
+    auto portReturns =
+    PortfolioMetrics::portfolioReturnSeries(
+        returns,
+        tp.weights
+    );
+
+    double var95_hist =
+        RiskMetrics::historicalVaR(portReturns, 0.95);
+
+    //market crash
+    auto crash =
+    RiskMetrics::marketCrash(
+        tp.weights, mu, cov, 0.30);
+
+    auto assetShock =
+        RiskMetrics::singleAssetShock(
+            tp.weights, mu, cov, 0, 0.50);
+
+    auto volSpike =
+        RiskMetrics::volatilitySpike(
+            tp.weights, mu, cov, 2.0);
+
+    std::cout << "Stress Test Results\n";
+    std::cout << "Market Crash Return: " << crash.stressedReturn << "\n";
+    std::cout << "Single Asset Shock Return: " << assetShock.stressedReturn << "\n";
+    std::cout << "Volatility Spike Risk: " << volSpike.stressedRisk << "\n";
+
+
+    /* ---- Export ---- */
+    exportPortfolioDataToJSON(
+        "../frontend/vite-project/public/portfolio_data.json",
+        ef,
+        cml,
+        tp
+    );
 
     return 0;
 }

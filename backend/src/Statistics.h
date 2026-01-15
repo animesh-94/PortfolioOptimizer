@@ -1,8 +1,8 @@
-#ifndef PORTFOLIOOPTIMIZER_STATISTICS_H
-#define PORTFOLIOOPTIMIZER_STATISTICS_H
+#ifndef STATISTICS_H
+#define STATISTICS_H
 
-#include <string>
 #include <vector>
+#include <string>
 
 class Statistics {
 public:
@@ -16,7 +16,8 @@ public:
     computeReturnsMean(const std::vector<std::vector<double>>& returns);
 
     static std::vector<std::vector<double>>
-    computeCovariance(const std::vector<std::vector<double>>& returns, const std::vector<double>& means);
+    computeCovariance(const std::vector<std::vector<double>>& returns,
+                      const std::vector<double>& means);
 };
 
-#endif // PORTFOLIOOPTIMIZER_STATISTICS_H
+#endif

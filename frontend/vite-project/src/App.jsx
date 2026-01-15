@@ -1,10 +1,11 @@
-import EfficientFrontierChart from "./components/EfficientFrontierChart";
+import EfficientFrontierChart from "./components/EfficientFrontierDashboard.jsx";
+import LandingPage from "./components/LandingPage.jsx";
 
 function App() {
     return (
-        <div style={{ padding: "2rem" }}>
+        <div>
             <h2>Efficient Frontier (Markowitz)</h2>
-            <EfficientFrontierChart />
+            <LandingPage/>
         </div>
     );
 }

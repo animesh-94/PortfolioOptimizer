@@ -1,0 +1,17 @@
+# ninja log v6
+276	676	7901756642805171	CMakeFiles/PortfolioOptimizer.dir/backend/src/Matrix.cpp.obj	16c94b92631781b7
+23	945	7901764709202477	CMakeFiles/PortfolioOptimizer.dir/backend/src/Statistics.cpp.obj	5e4bc441f53e6247
+6	492	7901961171252146	CMakeFiles/PortfolioOptimizer.dir/backend/src/main.cpp.obj	788893d8088bcc60
+183	1059	7901950013563607	CMakeFiles/PortfolioOptimizer.dir/backend/src/PortfolioExporter.cpp.obj	34532cd6a1a831fb
+16	1859	7901961033892900	CMakeFiles/PortfolioOptimizer.dir/backend/src/Optimizer.cpp.obj	899d406fa38cd549
+493	659	7901961176103883	PortfolioOptimizer.exe	2e799c58b86e1b39
+21	1004	7901872683476981	CMakeFiles/PortfolioOptimizer.dir/backend/src/PortfolioMetrics.cpp.obj	6ad68aed4ca10f93
+24	311	7901961033976960	CMakeFiles/PortfolioOptimizer.dir/backend/src/OptimizerUtils.cpp.obj	f4a1ba9adffdeb28
+29	639	7901969504206827	CMakeFiles/PortfolioOptimizer.dir/backend/src/PortfolioMetrics.cpp.obj	6ad68aed4ca10f93
+7	864	7901969503986157	CMakeFiles/PortfolioOptimizer.dir/backend/src/main.cpp.obj	788893d8088bcc60
+18	2069	7901969504099019	CMakeFiles/PortfolioOptimizer.dir/backend/src/Optimizer.cpp.obj	899d406fa38cd549
+18	962	7901995093782119	CMakeFiles/PortfolioOptimizer.dir/backend/src/RiskMetrics.cpp.obj	5e8d4c243578643a
+10	2339	7901997892984044	CMakeFiles/PortfolioOptimizer.dir/backend/src/RiskMetrics.cpp.obj	5e8d4c243578643a
+2340	2588	7901997916274594	PortfolioOptimizer.exe	4663e098acbf4fd0
+11	2948	7902000996672597	CMakeFiles/PortfolioOptimizer.dir/backend/src/Optimizer.cpp.obj	899d406fa38cd549
+2949	3263	7902001026055301	PortfolioOptimizer.exe	4663e098acbf4fd0
