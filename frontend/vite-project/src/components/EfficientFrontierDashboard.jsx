@@ -3,13 +3,15 @@ import {
     ResponsiveContainer, Tooltip, AreaChart, Area
 } from "recharts";
 import { useEffect, useState, useMemo } from "react";
-import { Layers, PieChart as PieIcon, Sliders, Activity, PlayCircle } from "lucide-react";
+import { Layers, PieChart as PieIcon, Sliders, Activity, PlayCircle, Keyboard } from "lucide-react";
 
-// --- IMPORTS (Ensure these files exist in your components folder) ---
+// --- CUSTOM IMPORTS ---
 import RiskFreeRateControl from "./RiskFreeRateControl.jsx";
+import AssetAllocationPie from "./AssetAllocationPie.jsx";
 import ScenarioAnalysis from "./ScenarioAnalysis.jsx";
 import VaRCard from "./VaRCard.jsx";
-import AssetAllocationPie from "./AssetAllocationPie.jsx";
+import AnimatedNumber from "./AnimatedNumber.jsx";     // <--- NEW
+import useKeyboardShortcuts from "../hooks/useKeyboardShortcuts.js"; // <--- NEW
 
 // --- HELPERS ---
 
@@ -18,7 +20,7 @@ const generateMonteCarlo = (count, maxRisk, maxReturn) => {
     const points = [];
     for (let i = 0; i < count; i++) {
         const risk = 4 + Math.random() * (maxRisk - 4);
-        const maxReturnAtRisk = 2 + Math.log(risk - 3) * 4.5; // Log curve approximation
+        const maxReturnAtRisk = 2 + Math.log(risk - 3) * 4.5;
         const returns = 2 + Math.random() * (maxReturnAtRisk - 2);
 
         points.push({
@@ -49,12 +51,10 @@ const backtestData = [
 // 3. Custom Tooltip
 const StockTickerTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
-        if (payload[0].payload.isSimulation) return null; // Don't show for background dots
+        if (payload[0].payload.isSimulation) return null;
+        if (payload[0].dataKey === 'portfolio') return null; // Skip backtest for now
 
         const data = payload[0].payload;
-        // Check if backtest view
-        if (payload[0].dataKey === 'portfolio') return null;
-
         const returnVal = payload.find(p => p.dataKey === 'return')?.value;
         const riskVal = data.risk;
 
@@ -86,7 +86,7 @@ export default function EfficientFrontierDashboard() {
     const [tangency, setTangency] = useState(null);
     const [monteCarloData, setMonteCarloData] = useState([]);
 
-    // View & Interaction States
+    // View States
     const [viewMode, setViewMode] = useState('frontier'); // 'frontier' | 'backtest'
     const [isSimulating, setIsSimulating] = useState(false);
     const [selectedPoint, setSelectedPoint] = useState(null);
@@ -95,7 +95,13 @@ export default function EfficientFrontierDashboard() {
     const [riskFreeRate, setRiskFreeRate] = useState(2.0);
     const [riskTolerance, setRiskTolerance] = useState(50);
 
-    // Initial Data Load (Simulated Fetch)
+    // --- HOTKEYS HOOK ---
+    useKeyboardShortcuts({
+        'm': () => handleRunSimulation(),
+        'b': () => setViewMode(prev => prev === 'backtest' ? 'frontier' : 'backtest'),
+    });
+
+    // Initial Data Load
     useEffect(() => {
         const sampleEF = Array.from({ length: 100 }, (_, i) => ({
             risk: 4 + (i * 0.3),
@@ -107,23 +113,19 @@ export default function EfficientFrontierDashboard() {
     }, []);
 
     // --- HANDLERS ---
-
-    // 1. Run Monte Carlo Simulation
     const handleRunSimulation = () => {
         if (monteCarloData.length > 0) {
-            setMonteCarloData([]); // Toggle Off
+            setMonteCarloData([]);
             return;
         }
-
         setIsSimulating(true);
         setTimeout(() => {
             const simulation = generateMonteCarlo(1000, 35, 25);
             setMonteCarloData(simulation);
             setIsSimulating(false);
-        }, 500); // Simulate calculation delay
+        }, 500);
     };
 
-    // 2. Handle Risk Tolerance Slider (THE FIX IS HERE)
     const handleSliderChange = (e) => {
         const val = parseInt(e.target.value);
         setRiskTolerance(val);
@@ -134,8 +136,6 @@ export default function EfficientFrontierDashboard() {
     };
 
     // --- MEMOIZED CALCULATIONS ---
-
-    // 1. Dynamic Capital Market Line
     const dynamicCML = useMemo(() => {
         if (!tangency) return [];
         const slope = (tangency.return - riskFreeRate) / tangency.risk;
@@ -145,7 +145,6 @@ export default function EfficientFrontierDashboard() {
         ];
     }, [tangency, riskFreeRate]);
 
-    // 2. Portfolio Holdings (Mock Logic based on Risk)
     const holdings = useMemo(() => {
         if (!selectedPoint) return [];
         const r = selectedPoint.risk;
@@ -161,7 +160,6 @@ export default function EfficientFrontierDashboard() {
         ].sort((a, b) => b.pct - a.pct);
     }, [selectedPoint]);
 
-    // 3. Sharpe Ratio
     const currentSharpe = useMemo(() => {
         if (!selectedPoint) return 0;
         return (selectedPoint.return - riskFreeRate) / selectedPoint.risk;
@@ -177,9 +175,17 @@ export default function EfficientFrontierDashboard() {
                         <h1 className="text-3xl font-light text-white tracking-tight">
                             Portfolio <span className="font-bold text-blue-500">Navigator</span>
                         </h1>
-                        <div className="flex gap-6 mt-4">
-                            <button onClick={() => setViewMode('frontier')} className={`pb-2 text-sm font-medium transition-colors border-b-2 ${viewMode === 'frontier' ? 'border-blue-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>Efficient Frontier</button>
-                            <button onClick={() => setViewMode('backtest')} className={`pb-2 text-sm font-medium transition-colors border-b-2 ${viewMode === 'backtest' ? 'border-blue-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>Historical Performance</button>
+                        <div className="flex items-center gap-4 mt-4">
+                            <div className="flex gap-6">
+                                <button onClick={() => setViewMode('frontier')} className={`pb-2 text-sm font-medium transition-colors border-b-2 ${viewMode === 'frontier' ? 'border-blue-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>Efficient Frontier</button>
+                                <button onClick={() => setViewMode('backtest')} className={`pb-2 text-sm font-medium transition-colors border-b-2 ${viewMode === 'backtest' ? 'border-blue-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>Historical Performance</button>
+                            </div>
+
+                            {/* Hotkeys Hint */}
+                            <div className="hidden md:flex items-center gap-2 text-[10px] text-slate-600 font-mono border border-slate-800 px-2 py-1 rounded">
+                                <Keyboard size={10} />
+                                <span>HOTKEYS: [M] SIMULATE • [B] BACKTEST</span>
+                            </div>
                         </div>
                     </div>
 
@@ -194,11 +200,7 @@ export default function EfficientFrontierDashboard() {
                                     : "bg-slate-800 text-white hover:bg-slate-700 border border-slate-700"
                             } ${viewMode === 'backtest' ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                            {isSimulating ? (
-                                <Activity className="animate-spin" size={16} />
-                            ) : (
-                                <PlayCircle size={16} />
-                            )}
+                            {isSimulating ? <Activity className="animate-spin" size={16} /> : <PlayCircle size={16} />}
                             {isSimulating ? "Running..." : monteCarloData.length > 0 ? "Clear Simulation" : "Run Monte Carlo"}
                         </button>
                     </div>
@@ -206,7 +208,7 @@ export default function EfficientFrontierDashboard() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-                    {/* --- LEFT COLUMN: CHART & CONTROLS --- */}
+                    {/* --- LEFT COLUMN --- */}
                     <div className="lg:col-span-8 space-y-6">
                         <div className="h-[500px] w-full relative group rounded-lg overflow-hidden border border-slate-900 bg-slate-900/20">
                             {viewMode === 'frontier' ? (
@@ -223,18 +225,8 @@ export default function EfficientFrontierDashboard() {
                                         <YAxis type="number" dataKey="return" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#1e293b' }} tickLine={false} domain={['auto', 'auto']} />
                                         <Tooltip content={<StockTickerTooltip />} cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '2 2', opacity: 0.5 }} wrapperStyle={{ outline: 'none' }} isAnimationActive={false} />
 
-                                        {/* Monte Carlo Scatter */}
-                                        {monteCarloData.length > 0 && (
-                                            <Scatter
-                                                data={monteCarloData}
-                                                fill="#475569"
-                                                opacity={0.4}
-                                                shape="circle"
-                                                legendType="none"
-                                            />
-                                        )}
-
-                                        {/* Standard Layers */}
+                                        {/* Layers */}
+                                        {monteCarloData.length > 0 && <Scatter data={monteCarloData} fill="#475569" opacity={0.4} shape="circle" legendType="none" />}
                                         <Line data={dynamicCML} type="linear" dataKey="return" stroke="#10b981" strokeWidth={1} strokeDasharray="3 3" dot={false} opacity={0.8} />
                                         <Line data={efData} type="monotone" dataKey="return" stroke="url(#lineGradient)" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "white", stroke: "#3b82f6", strokeWidth: 2 }} />
                                         {tangency && <Scatter data={[tangency]} fill="#10b981" stroke="#fff" strokeWidth={2} shape="diamond" />}
@@ -254,33 +246,24 @@ export default function EfficientFrontierDashboard() {
                             )}
                         </div>
 
-                        {/* Chart Controls */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Slider */}
                             <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 backdrop-blur-sm">
                                 <div className="flex justify-between items-center mb-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-400">
-                                            <Sliders size={16} />
-                                        </div>
+                                        <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-400"><Sliders size={16} /></div>
                                         <h3 className="text-sm font-semibold text-slate-200">Risk Tolerance</h3>
                                     </div>
-                                    <span className="text-2xl font-mono text-white tracking-tight">{riskTolerance}%</span>
+                                    <span className="text-2xl font-mono text-white tracking-tight">
+                                        <AnimatedNumber value={riskTolerance} format={v => v.toFixed(0)} />%
+                                    </span>
                                 </div>
-                                <input
-                                    type="range" min="0" max="100"
-                                    value={riskTolerance}
-                                    onChange={handleSliderChange} // This function is now defined!
-                                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400"
-                                />
+                                <input type="range" min="0" max="100" value={riskTolerance} onChange={handleSliderChange} className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" />
                             </div>
-
-                            {/* Risk Free Rate Component */}
                             <RiskFreeRateControl value={riskFreeRate} onChange={setRiskFreeRate} />
                         </div>
                     </div>
 
-                    {/* --- RIGHT COLUMN: METRICS & ALLOCATION --- */}
+                    {/* --- RIGHT COLUMN --- */}
                     <div className="lg:col-span-4 space-y-6">
                         <div className="grid grid-cols-2 gap-3">
                             <MetricBox label="Sharpe Ratio" value={currentSharpe.toFixed(2)} color="text-white" bg="bg-blue-900/20" border="border-blue-900/50" />
@@ -298,33 +281,40 @@ export default function EfficientFrontierDashboard() {
                     </div>
                 </div>
 
-                {/* --- BOTTOM SECTION: RISK INTELLIGENCE --- */}
+                {/* --- BOTTOM SECTION --- */}
                 <div className="border-t border-slate-900 pt-8">
                     <h2 className="text-xl font-light text-white mb-6 flex items-center gap-2">
                         <Activity className="text-rose-500" /> Risk Intelligence
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <VaRCard
-                            risk={selectedPoint ? selectedPoint.risk : 0}
-                            portfolioReturn={selectedPoint ? selectedPoint.return : 0}
-                        />
-                        <ScenarioAnalysis
-                            selectedRisk={selectedPoint ? selectedPoint.risk : 10}
-                        />
+                        <VaRCard risk={selectedPoint ? selectedPoint.risk : 0} portfolioReturn={selectedPoint ? selectedPoint.return : 0} />
+                        <ScenarioAnalysis selectedRisk={selectedPoint ? selectedPoint.risk : 10} />
                     </div>
                 </div>
-
             </div>
         </div>
     );
 }
 
-// UI Helper
+// UI Helper with Animation
 function MetricBox({ label, value, color, bg = "bg-slate-900/30", border = "border-slate-800" }) {
+    const numValue = parseFloat(value);
+    const suffix = value.toString().includes('%') ? '%' : '';
+    const isNumber = !isNaN(numValue);
+
     return (
-        <div className={`${bg} p-4 rounded-xl border ${border}`}>
+        <div className={`${bg} p-4 rounded-xl border ${border} transition-all hover:bg-slate-800/50`}>
             <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 font-semibold">{label}</div>
-            <div className={`text-2xl font-mono font-medium tracking-tighter ${color}`}>{value}</div>
+            <div className={`text-2xl font-mono font-medium tracking-tighter ${color}`}>
+                {isNumber ? (
+                    <>
+                        <AnimatedNumber value={numValue} />
+                        {suffix}
+                    </>
+                ) : (
+                    value
+                )}
+            </div>
         </div>
     );
 }
