@@ -3,28 +3,31 @@
 
 📊 Portfolio Optimizer (v1.0) — Research-Grade Prototype
 
+
+
+
 Language: C++17/20
 Focus: Modern Portfolio Theory (MPT), Risk Analysis, Monte Carlo Simulation
 
 🖥️ Frontend Dashboard
 
-Built with React, the dashboard communicates with your C++ backend via REST/JSON APIs.
+React-based interactive dashboard connected to a high-performance C++ backend.
 
 Live Demo Features:
 
-Efficient Frontier: Interactive curve via /api/efficientFrontier
+💹 Efficient Frontier: Interactive curve (/api/efficientFrontier)
 
-Portfolio Stats: Real-time Sharpe ratio, volatility, drawdown from /api/tangency
+📈 Portfolio Stats: Real-time Sharpe, volatility, drawdown (/api/tangency)
 
-Asset Allocation: Pie chart of optimal portfolio weights
+🥧 Asset Allocation: Pie chart of optimal weights
 
-Risk Lab: VaR, stress tests, Monte Carlo confidence bands
+⚠️ Risk Lab: VaR, stress tests, Monte Carlo bands
 
-Performance: Sub-3s responses even for 50K-path Monte Carlo simulations.
+Performance: Sub-3s responses for 50K Monte Carlo paths
 
 🚀 Why C++ & cpp-httplib?
 
-C++ is ideal for quant workloads, offering 10–100× speedups over Python for large-scale calculations.
+C++ is perfect for quant workloads, offering 10–100× speedups over Python.
 
 Operation	C++ (Eigen/STL)	Python (NumPy)	Speedup
 Covariance 500×500	28 ms	3.2 s	114×
@@ -32,7 +35,7 @@ Monte Carlo 10K×252	1.8 s	48 s	27×
 Matrix Multiplication 1000×1000	180 ms	12 s	67×
 Efficient Frontier (100 pts)	250 ms	8.2 s	33×
 
-cpp-httplib Advantages:
+cpp-httplib Highlights:
 
 ✅ Single-header, zero dependencies (<50 KB binary)
 
@@ -42,7 +45,7 @@ cpp-httplib Advantages:
 
 🏗️ Architecture Overview
 graph TD;
-  React[Portfolio Navigator Dashboard] <-->|REST/JSON| Server[httplib Server (Routing Only)]
+  React[Portfolio Navigator Dashboard] <-->|REST/JSON| Server[httplib Server]
   Server --> Quant[Quant Engine (Pure Math Modules)]
   Quant --> Data[Eigen Matrices (Static Cache)]
 
@@ -52,7 +55,7 @@ graph TD;
     Backtest["Backtest<br/>Equity Curves"]
   end
 
-🔌 API Reference (Dashboard-Driven)
+🔌 API Reference
 Tangency Portfolio
 POST /api/tangency
 {
@@ -93,9 +96,9 @@ POST /api/efficientFrontier
 }
 
 
-Response: 100 points for interactive curve plotting
+Response: 100 points for interactive plotting
 
-Performance: p95 latency < 3s (50K Monte Carlo paths included)
+Latency: p95 < 3s (50K Monte Carlo paths included)
 
 🧮 Module Deep Dive
 Optimizer.h
@@ -109,29 +112,29 @@ Analytical solution for tangency portfolios
 
 Stable for 1000+ assets
 
-No external solvers like CVXPY needed
+No external solvers needed
 
 Monte Carlo Engine
 
-SIMD-optimized: 50K paths × 252 days → 2.1 s (27× faster than Python)
+SIMD-optimized: 50K paths × 252 days → 2.1 s
 
-Uses Cholesky decomposition for correlated shocks
+Cholesky decomposition → correlated shocks
 
-Mersenne Twister RNG (industrial-grade)
+Industrial-grade Mersenne Twister RNG
 
 ⚠️ Current Status
 
-✅ Delivered: Research-grade core, analytical solvers, Monte Carlo engine
+✅ Delivered: Research-grade core, solvers, Monte Carlo engine
 ❌ Next Phases:
 
-Live market data integration (e.g., AlphaVantage)
+Live market data integration (AlphaVantage)
 
 10–100× speed improvements
 
 Docker/Kubernetes deployment
 
-Rebalancing engine, deterministic baselines
+Rebalancing engine, transaction costs
 
-Transaction cost modeling
+Deterministic baseline support
 
-Philosophy: Verify math at scale first, realism comes next.
+Philosophy: Verify math at scale first, realism comes later.
