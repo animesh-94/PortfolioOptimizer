@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    ReferenceLine, BarChart, Bar
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { Calendar, TrendingUp, TrendingDown, Activity, AlertCircle } from 'lucide-react';
 import { portfolioApi } from '../services/api';
@@ -16,27 +15,21 @@ export default function BacktestChart({ weights }) {
     // --- FETCH DATA ---
     useEffect(() => {
         let mounted = true;
-        // Skip if no weights (e.g., initial load)
         if (!weights || weights.length === 0) return;
 
         const runBacktest = async () => {
             setLoading(true);
             setError(null);
             try {
-                // Fetch from API
                 const result = await portfolioApi.getBacktest(weights, timeRange);
 
                 if (mounted) {
-                    // Expecting backend to return: { history: [{ date, value, drawdown }, ...], metrics: {...} }
-                    // If backend is simple, we might just get an array.
-                    // For robustness, let's assume we might need to process it or receive it ready.
-                    // Here we assume the backend does the heavy lifting of historical simulation.
                     setData(result);
                 }
             } catch (err) {
                 if (mounted) {
                     console.error("Backtest failed:", err);
-                    setError("Could not retrieve historical data for this allocation.");
+                    setError("Could not retrieve historical data.");
                 }
             } finally {
                 if (mounted) setLoading(false);
@@ -47,35 +40,18 @@ export default function BacktestChart({ weights }) {
         return () => { mounted = false; };
     }, [weights, timeRange]);
 
-    // --- CALCULATE METRICS (Fallback if API doesn't provide them) ---
+    // --- METRICS CALCULATION (Safe fallback) ---
     const metrics = useMemo(() => {
-        if (!data || !data.history || data.history.length === 0) return null;
-
-        // Use backend metrics if available, otherwise calculate
-        if (data.metrics) return data.metrics;
-
-        const hist = data.history;
-        const startVal = hist[0].value;
-        const endVal = hist[hist.length - 1].value;
-        const totalReturn = (endVal - startVal) / startVal;
-
-        // Find Max Drawdown
-        const minDrawdown = Math.min(...hist.map(d => d.drawdown));
-
-        return {
-            totalReturn: totalReturn * 100,
-            cagr: ((Math.pow(endVal / startVal, 1) - 1) * 100), // Simplified for 1Y
-            maxDrawdown: minDrawdown * 100,
-            sharpe: 1.5 // Mock if missing
-        };
+        if (!data) return { totalReturn: 0, cagr: 0, maxDrawdown: 0, sharpe: 0 };
+        return data.metrics || { totalReturn: 0, cagr: 0, maxDrawdown: 0, sharpe: 0 };
     }, [data]);
 
     // --- LOADING STATE ---
     if (loading) {
         return (
-            <div className="h-[500px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-slate-500">
+            <div className="h-[450px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-slate-500">
                 <Activity className="animate-spin mb-4 text-blue-500" size={48} />
-                <span className="font-mono text-sm tracking-widest uppercase">Simulating Historical Performance...</span>
+                <span className="font-mono text-sm tracking-widest uppercase">Running Historical Simulation...</span>
             </div>
         );
     }
@@ -83,7 +59,7 @@ export default function BacktestChart({ weights }) {
     // --- ERROR STATE ---
     if (error) {
         return (
-            <div className="h-[500px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-rose-500">
+            <div className="h-[450px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-rose-500">
                 <AlertCircle className="mb-4" size={48} />
                 <span className="font-medium">{error}</span>
                 <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-slate-800 rounded hover:bg-slate-700 text-slate-300 text-sm">Retry</button>
@@ -94,7 +70,7 @@ export default function BacktestChart({ weights }) {
     // --- EMPTY STATE ---
     if (!data || !data.history) {
         return (
-            <div className="h-[500px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-slate-600">
+            <div className="h-[450px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-slate-600">
                 <Calendar className="mb-4 opacity-50" size={48} />
                 <span>Select a portfolio on the "Construct" tab to view backtest.</span>
             </div>
@@ -161,8 +137,8 @@ export default function BacktestChart({ weights }) {
                     </div>
                 </div>
 
-                {/* CHART 1: EQUITY CURVE (70% Height) */}
-                <div className="h-[300px] w-full mb-2">
+                {/* CHART 1: EQUITY CURVE (Fixed Height) */}
+                <div className="w-full mb-2" style={{ height: 280 }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={data.history} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
                             <defs>
@@ -197,8 +173,9 @@ export default function BacktestChart({ weights }) {
                     </ResponsiveContainer>
                 </div>
 
-                {/* CHART 2: DRAWDOWN UNDERWATER PLOT (30% Height) */}
-                <div className="h-[100px] w-full border-t border-slate-800 pt-2">
+                {/* CHART 2: DRAWDOWN (Fixed Height, Auto Domain) */}
+                <div className="w-full border-t border-slate-800 pt-2 relative" style={{ height: 100 }}>
+                    <p className="absolute top-2 left-2 text-[10px] text-slate-500 font-mono">DRAWDOWN</p>
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={data.history} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                             <defs>
@@ -216,7 +193,7 @@ export default function BacktestChart({ weights }) {
                             />
                             <YAxis
                                 hide
-                                domain={[-0.5, 0]} // Fixed domain for drawdown visualization
+                                domain={['auto', 0]} // Auto-scale for deep crashes
                             />
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#0f172a', borderColor: '#ef4444', color: '#ef4444' }}
@@ -238,7 +215,7 @@ export default function BacktestChart({ weights }) {
     );
 }
 
-// Sub-component for nice metrics
+// Fixed SummaryCard (Handles Negative Signs correctly)
 function SummaryCard({ label, value, icon, color, isPercent = true }) {
     return (
         <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition-all">
@@ -246,8 +223,11 @@ function SummaryCard({ label, value, icon, color, isPercent = true }) {
                 {icon} {label}
             </div>
             <div className={`text-2xl font-mono font-medium ${color}`}>
+                {/* Explicit sign handling */}
                 {value > 0 && isPercent ? "+" : ""}
-                <AnimatedNumber value={value} />
+                {value < 0 ? "-" : ""}
+
+                <AnimatedNumber value={Math.abs(value)} />
                 {isPercent ? "%" : ""}
             </div>
         </div>

@@ -18,7 +18,7 @@ import BacktestChart from "./BacktestChart";
 import AnimatedNumber from "./AnimatedNumber";
 import RiskFreeRateControl from "./RiskFreeRateControl";
 import ConstraintsPanel from "./ConstraintsPanel";
-import LiveTicker from "./LiveTicker.jsx"; // <--- NEW IMPORT
+import LiveTicker from "./LiveTicker";
 
 // --- SERVICES & CONTEXT ---
 import { portfolioApi } from "../services/api";
@@ -38,10 +38,12 @@ export default function EfficientFrontierDashboard() {
     // --- VIEW STATE ---
     const [activeTab, setActiveTab] = useState('optimizer');
     const [isLoading, setIsLoading] = useState(true);
+
+    // --- SELECTION STATE ---
     const [selectedPoint, setSelectedPoint] = useState(null);
     const [riskTolerance, setRiskTolerance] = useState(50);
 
-    // --- CONSTRAINTS ---
+    // --- CONSTRAINTS STATE ---
     const [constraints, setConstraints] = useState({
         longOnly: true,
         maxWeight: 100
@@ -50,6 +52,8 @@ export default function EfficientFrontierDashboard() {
     // --- API FETCHING ---
     const fetchData = useCallback(async () => {
         setIsLoading(true);
+        console.log("Fetching Dashboard Data..."); // DEBUG
+
         try {
             const rfDecimal = riskFreeRate / 100;
             const backendConstraints = {
@@ -64,6 +68,9 @@ export default function EfficientFrontierDashboard() {
                 portfolioApi.getStressTest()
             ]);
 
+            console.log("API Response - EF:", efRes);       // DEBUG
+            console.log("API Response - Tangency:", tangencyRes); // DEBUG
+
             setEF(efRes.efficient_frontier || []);
             setTangency(tangencyRes);
             setVarData(varRes);
@@ -74,14 +81,6 @@ export default function EfficientFrontierDashboard() {
                 { name: "Volatility Spike (2x)", impact: -(stressRes.volatility_spike_risk * 100) }
             ]);
 
-            if (tangencyRes) {
-                const tPoint = {
-                    risk: tangencyRes.risk * 100,
-                    return: tangencyRes.expected_return * 100,
-                    weights: tangencyRes.weights
-                };
-                setSelectedPoint(tPoint);
-            }
         } catch (err) {
             console.error("Dashboard fetch error:", err);
         } finally {
@@ -89,14 +88,41 @@ export default function EfficientFrontierDashboard() {
         }
     }, [riskFreeRate, constraints]);
 
+    // Initial Load
     useEffect(() => { fetchData(); }, [fetchData]);
 
+    // --- NEW: ROBUST AUTO-SELECT LOGIC ---
+    // This runs whenever 'tangency' or 'efData' updates to ensure a selection exists.
+    useEffect(() => {
+        if (selectedPoint) return; // Don't override user selection
+
+        if (tangency) {
+            console.log("Auto-selecting Tangency Portfolio");
+            setSelectedPoint({
+                risk: tangency.risk * 100,
+                return: tangency.expected_return * 100,
+                weights: tangency.weights
+            });
+        }
+        else if (efData.length > 0) {
+            console.log("Auto-selecting Frontier Point");
+            const mid = efData[Math.floor(efData.length / 2)];
+            setSelectedPoint({
+                risk: mid.risk_pct,
+                return: mid.return_pct,
+                weights: mid.weights || []
+            });
+        }
+    }, [tangency, efData, selectedPoint]);
+
+    // Lazy Load Monte Carlo
     useEffect(() => {
         if (activeTab === 'risk' && !simulationData) {
             portfolioApi.runMonteCarlo(1000).then(setSimulationData).catch(console.error);
         }
     }, [activeTab]);
 
+    // Slider Handler
     const handleSliderChange = (e) => {
         const val = parseInt(e.target.value);
         setRiskTolerance(val);
@@ -111,6 +137,7 @@ export default function EfficientFrontierDashboard() {
         }
     };
 
+    // CML Calculation
     const dynamicCML = useMemo(() => {
         if (!tangency) return [];
         const tRisk = tangency.risk * 100;
@@ -153,11 +180,8 @@ export default function EfficientFrontierDashboard() {
 
                     {/* CONTROLS AREA */}
                     <div className="flex flex-col items-end gap-3">
-
-                        {/* NEW: LIVE TICKER */}
                         <LiveTicker />
 
-                        {/* TAB NAVIGATION */}
                         <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
                             <TabButton
                                 active={activeTab === 'optimizer'}
@@ -185,6 +209,7 @@ export default function EfficientFrontierDashboard() {
                 {activeTab === 'optimizer' && (
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-300">
                         <div className="lg:col-span-8 space-y-6">
+                            {/* CHART */}
                             <div className="h-[520px] w-full bg-slate-900/20 rounded-lg border border-slate-900 relative">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart margin={{ top: 20, right: 20, left: -10, bottom: 20 }}>
@@ -192,14 +217,17 @@ export default function EfficientFrontierDashboard() {
                                         <XAxis type="number" dataKey="risk_pct" tick={{ fill: '#64748b', fontSize: 10 }} domain={['auto', 'auto']} label={{ value: 'Risk (Vol %)', position: 'insideBottom', offset: -5, fill: '#475569' }} />
                                         <YAxis type="number" dataKey="return_pct" tick={{ fill: '#64748b', fontSize: 10 }} domain={['auto', 'auto']} label={{ value: 'Return (%)', angle: -90, position: 'insideLeft', fill: '#475569' }} />
                                         <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }} />
+
                                         <Line data={dynamicCML} type="linear" dataKey="return_pct" stroke="#10b981" strokeDasharray="3 3" dot={false} strokeWidth={1} name="Capital Market Line" />
                                         <Line data={efData} type="monotone" dataKey="return_pct" stroke="#3b82f6" strokeWidth={2} dot={false} name="Efficient Frontier" />
+
                                         {tangency && <Scatter data={[{ x: tangency.risk*100, y: tangency.expected_return*100 }]} fill="#10b981" name="Tangency Portfolio" />}
                                         {selectedPoint && <Scatter data={[{ x: selectedPoint.risk, y: selectedPoint.return }]} fill="#fff" stroke="#3b82f6" strokeWidth={2} name="Selected" />}
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
 
+                            {/* CONTROLS */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
                                     <div className="flex justify-between mb-4">
@@ -217,6 +245,7 @@ export default function EfficientFrontierDashboard() {
                             <ConstraintsPanel constraints={constraints} onChange={setConstraints} />
                         </div>
 
+                        {/* RIGHT COLUMN */}
                         <div className="lg:col-span-4 flex flex-col gap-4 h-[auto] min-h-[640px]">
                             <div className="grid grid-cols-2 gap-3 shrink-0">
                                 <MetricBox label="Sharpe Ratio" value={tangency ? tangency.sharpe_ratio.toFixed(2) : 0} color="text-white" />
@@ -271,6 +300,7 @@ export default function EfficientFrontierDashboard() {
                 {/* --- TAB 3: BACKTEST --- */}
                 {activeTab === 'backtest' && (
                     <div className="animate-in slide-in-from-right-4 duration-300">
+                        {/* Pass currently selected weights to trigger backtest immediately */}
                         <BacktestChart weights={selectedPoint ? selectedPoint.weights : []} />
                     </div>
                 )}
@@ -279,7 +309,7 @@ export default function EfficientFrontierDashboard() {
     );
 }
 
-// --- HELPERS ---
+// --- HELPER COMPONENTS ---
 
 function TabButton({ active, onClick, icon, label }) {
     return (

@@ -7,6 +7,8 @@
 #include "../src/RiskMetrics.h"
 #include "../src/DataCache.h"
 #include "../src/Statistics.h"
+#include "../src/BacktestEngine.h"
+#include "../src/data/MarketDataService.h"
 
 #include <iostream>
 
@@ -300,6 +302,44 @@ void Server::start(int port) {
                             "application/json");
         }
     });
+
+    //POST Api for backtest
+    svr.Post("/api/backtest",
+[&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            DataCache::instance().loadIfNeeded();
+
+            auto returns = DataCache::instance().returns();
+            auto &mu = DataCache::instance().mean();
+            auto &cov = DataCache::instance().cov();
+
+            Optimizer opt;
+            auto tp = opt.computeTangencyPortfolio(mu, cov, 0.001);
+
+            auto bt =
+                BacktestEngine::run(
+                    returns,
+                    tp.weights
+                );
+
+            json response;
+            response["equity_curve"] = bt.equityCurve;
+            response["drawdown"] = bt.drawdown;
+            response["cagr"] = bt.cagr;
+            response["max_drawdown"] = bt.maxDrawdown;
+
+            res.set_content(response.dump(), "application/json");
+            res.status = 200;
+        }
+        catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(
+                json{{"error", e.what()}}.dump(),
+                "application/json"
+            );
+        }
+    });
+
 
 
     // ===============================

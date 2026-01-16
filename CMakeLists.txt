@@ -25,6 +25,13 @@ add_executable(PortfolioOptimizer
         backend/src/PortfolioService.h
         backend/src/DataCache.cpp
         backend/src/DataCache.h
+        backend/src/BacktestEngine.cpp
+        backend/src/BacktestEngine.h
+        backend/src/data/DataProvider.h
+        backend/src/data/CSVProvider.cpp
+        backend/src/data/MarketDataService.cpp
+        backend/src/data/CSVProvider.h
+        backend/src/data/MarketDataService.h
 )
 
 # Fix for Windows 10/11 API compatibility
