@@ -1,3 +1,6 @@
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+
 📊 Portfolio Optimizer (v1.0) — Research-Grade Prototype
 
 Language: C++17/20
