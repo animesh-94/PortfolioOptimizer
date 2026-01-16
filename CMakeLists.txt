@@ -4,6 +4,7 @@ project(PortfolioOptimizer)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Define the executable and source files
 add_executable(PortfolioOptimizer
         backend/src/main.cpp
         backend/src/Statistics.cpp
@@ -16,5 +17,31 @@ add_executable(PortfolioOptimizer
         backend/src/OptimizerUtils.h
         backend/src/RiskMetrics.cpp
         backend/src/RiskMetrics.h
+        backend/api/server.cpp
+        backend/api/server.h
+        backend/external/json.hpp
+        backend/external/httplib.h
+        backend/src/PortfolioService.cpp
+        backend/src/PortfolioService.h
+        backend/src/DataCache.cpp
+        backend/src/DataCache.h
 )
 
+# Fix for Windows 10/11 API compatibility
+if(WIN32)
+    add_compile_definitions(_WIN32_WINNT=0x0A00)
+endif()
+
+# Disable memory mapping (optional, but often good for simple builds)
+add_compile_definitions(CPPHTTPLIB_NO_MMAP)
+
+include_directories(
+        backend/external
+        backend/api
+)
+
+# --- ADD THIS SECTION AT THE END ---
+if(WIN32)
+    # Link Windows Sockets (ws2_32) and Crypto (crypt32) libraries
+    target_link_libraries(PortfolioOptimizer PRIVATE ws2_32 crypt32)
+endif()

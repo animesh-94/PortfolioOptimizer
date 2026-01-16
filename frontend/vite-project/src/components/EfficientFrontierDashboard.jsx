@@ -1,319 +1,308 @@
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Scatter,
-    ResponsiveContainer, Tooltip, AreaChart, Area
+    ResponsiveContainer, Tooltip
 } from "recharts";
-import { useEffect, useState, useMemo } from "react";
-import { Layers, PieChart as PieIcon, Sliders, Activity, PlayCircle, Keyboard } from "lucide-react";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import {
+    PieChart as PieIcon, Sliders, Activity, Table2,
+    LayoutDashboard, History, TrendingUp
+} from "lucide-react";
 
 // --- CUSTOM IMPORTS ---
-import RiskFreeRateControl from "./RiskFreeRateControl.jsx";
-import AssetAllocationPie from "./AssetAllocationPie.jsx";
-import ScenarioAnalysis from "./ScenarioAnalysis.jsx";
-import VaRCard from "./VaRCard.jsx";
-import AnimatedNumber from "./AnimatedNumber.jsx";     // <--- NEW
-import useKeyboardShortcuts from "../hooks/useKeyboardShortcuts.js"; // <--- NEW
+import AssetAllocationPie from "./AssetAllocationPie";
+import AssetAllocationTable from "./AssetAllocationTable";
+import MonteCarloChart from "./MonteCarloChart";
+import ScenarioAnalysis from "./ScenarioAnalysis";
+import VaRCard from "./VaRCard";
+import BacktestChart from "./BacktestChart";
+import AnimatedNumber from "./AnimatedNumber";
+import RiskFreeRateControl from "./RiskFreeRateControl";
+import ConstraintsPanel from "./ConstraintsPanel";
+import LiveTicker from "./LiveTicker.jsx"; // <--- NEW IMPORT
 
-// --- HELPERS ---
+// --- SERVICES & CONTEXT ---
+import { portfolioApi } from "../services/api";
+import useKeyboardShortcuts from "../hooks/useKeyboardShortcuts";
+import { usePortfolio } from "../context/PortfolioContext";
 
-// 1. Monte Carlo Generator
-const generateMonteCarlo = (count, maxRisk, maxReturn) => {
-    const points = [];
-    for (let i = 0; i < count; i++) {
-        const risk = 4 + Math.random() * (maxRisk - 4);
-        const maxReturnAtRisk = 2 + Math.log(risk - 3) * 4.5;
-        const returns = 2 + Math.random() * (maxReturnAtRisk - 2);
-
-        points.push({
-            risk: risk,
-            return: returns,
-            isSimulation: true
-        });
-    }
-    return points;
-};
-
-// 2. Mock Backtest Data
-const backtestData = [
-    { month: 'Jan', portfolio: 10000, sp500: 10000 },
-    { month: 'Feb', portfolio: 10350, sp500: 10100 },
-    { month: 'Mar', portfolio: 10100, sp500: 9800 },
-    { month: 'Apr', portfolio: 10600, sp500: 10400 },
-    { month: 'May', portfolio: 10950, sp500: 10600 },
-    { month: 'Jun', portfolio: 11400, sp500: 10800 },
-    { month: 'Jul', portfolio: 11300, sp500: 11100 },
-    { month: 'Aug', portfolio: 11800, sp500: 11300 },
-    { month: 'Sep', portfolio: 11600, sp500: 11000 },
-    { month: 'Oct', portfolio: 12100, sp500: 11400 },
-    { month: 'Nov', portfolio: 12800, sp500: 12100 },
-    { month: 'Dec', portfolio: 13200, sp500: 12400 },
-];
-
-// 3. Custom Tooltip
-const StockTickerTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-        if (payload[0].payload.isSimulation) return null;
-        if (payload[0].dataKey === 'portfolio') return null; // Skip backtest for now
-
-        const data = payload[0].payload;
-        const returnVal = payload.find(p => p.dataKey === 'return')?.value;
-        const riskVal = data.risk;
-
-        return (
-            <div className="bg-slate-900 border border-slate-700 rounded-md shadow-xl px-3 py-1.5 whitespace-nowrap z-50 pointer-events-none">
-                <div className="flex items-center gap-4 text-xs font-medium font-mono leading-tight">
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-                        <span className="text-slate-500">Ret:</span>
-                        <span className="text-emerald-300">{returnVal?.toFixed(2)}%</span>
-                    </div>
-                    <div className="h-3 w-px bg-slate-800"></div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-rose-400"></div>
-                        <span className="text-slate-500">Risk:</span>
-                        <span className="text-rose-300">{riskVal?.toFixed(2)}%</span>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-    return null;
-};
-
-// --- MAIN COMPONENT ---
 export default function EfficientFrontierDashboard() {
-    // Data States
+    const { riskFreeRate } = usePortfolio();
+
+    // --- DATA STATE ---
     const [efData, setEF] = useState([]);
     const [tangency, setTangency] = useState(null);
-    const [monteCarloData, setMonteCarloData] = useState([]);
+    const [scenarioData, setScenarioData] = useState(null);
+    const [varData, setVarData] = useState(null);
+    const [simulationData, setSimulationData] = useState(null);
 
-    // View States
-    const [viewMode, setViewMode] = useState('frontier'); // 'frontier' | 'backtest'
-    const [isSimulating, setIsSimulating] = useState(false);
+    // --- VIEW STATE ---
+    const [activeTab, setActiveTab] = useState('optimizer');
+    const [isLoading, setIsLoading] = useState(true);
     const [selectedPoint, setSelectedPoint] = useState(null);
-
-    // Controls
-    const [riskFreeRate, setRiskFreeRate] = useState(2.0);
     const [riskTolerance, setRiskTolerance] = useState(50);
 
-    // --- HOTKEYS HOOK ---
-    useKeyboardShortcuts({
-        'm': () => handleRunSimulation(),
-        'b': () => setViewMode(prev => prev === 'backtest' ? 'frontier' : 'backtest'),
+    // --- CONSTRAINTS ---
+    const [constraints, setConstraints] = useState({
+        longOnly: true,
+        maxWeight: 100
     });
 
-    // Initial Data Load
-    useEffect(() => {
-        const sampleEF = Array.from({ length: 100 }, (_, i) => ({
-            risk: 4 + (i * 0.3),
-            return: 6 + Math.log(i + 1) * 3.5
-        }));
-        setEF(sampleEF);
-        setTangency({ risk: 14, return: 13.5 });
-        setSelectedPoint(sampleEF[50]);
-    }, []);
+    // --- API FETCHING ---
+    const fetchData = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const rfDecimal = riskFreeRate / 100;
+            const backendConstraints = {
+                long_only: constraints.longOnly,
+                max_weight: constraints.maxWeight / 100.0
+            };
 
-    // --- HANDLERS ---
-    const handleRunSimulation = () => {
-        if (monteCarloData.length > 0) {
-            setMonteCarloData([]);
-            return;
+            const [efRes, tangencyRes, varRes, stressRes] = await Promise.all([
+                portfolioApi.getEfficientFrontier(60, backendConstraints),
+                portfolioApi.getTangencyPortfolio(rfDecimal, backendConstraints),
+                portfolioApi.getVaR(0.95),
+                portfolioApi.getStressTest()
+            ]);
+
+            setEF(efRes.efficient_frontier || []);
+            setTangency(tangencyRes);
+            setVarData(varRes);
+
+            setScenarioData([
+                { name: "Market Crash (-30%)", impact: (stressRes.market_crash_return * 100) },
+                { name: "Top Asset Shock (-50%)", impact: (stressRes.single_asset_shock_return * 100) },
+                { name: "Volatility Spike (2x)", impact: -(stressRes.volatility_spike_risk * 100) }
+            ]);
+
+            if (tangencyRes) {
+                const tPoint = {
+                    risk: tangencyRes.risk * 100,
+                    return: tangencyRes.expected_return * 100,
+                    weights: tangencyRes.weights
+                };
+                setSelectedPoint(tPoint);
+            }
+        } catch (err) {
+            console.error("Dashboard fetch error:", err);
+        } finally {
+            setIsLoading(false);
         }
-        setIsSimulating(true);
-        setTimeout(() => {
-            const simulation = generateMonteCarlo(1000, 35, 25);
-            setMonteCarloData(simulation);
-            setIsSimulating(false);
-        }, 500);
-    };
+    }, [riskFreeRate, constraints]);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    useEffect(() => {
+        if (activeTab === 'risk' && !simulationData) {
+            portfolioApi.runMonteCarlo(1000).then(setSimulationData).catch(console.error);
+        }
+    }, [activeTab]);
 
     const handleSliderChange = (e) => {
         const val = parseInt(e.target.value);
         setRiskTolerance(val);
         if (efData.length > 0) {
             const index = Math.floor((val / 100) * (efData.length - 1));
-            setSelectedPoint(efData[index]);
+            const pt = efData[index];
+            setSelectedPoint({
+                risk: pt.risk_pct,
+                return: pt.return_pct,
+                weights: pt.weights || (tangency ? tangency.weights : [])
+            });
         }
     };
 
-    // --- MEMOIZED CALCULATIONS ---
     const dynamicCML = useMemo(() => {
         if (!tangency) return [];
-        const slope = (tangency.return - riskFreeRate) / tangency.risk;
+        const tRisk = tangency.risk * 100;
+        const tRet = tangency.expected_return * 100;
+        const slope = (tRet - riskFreeRate) / tRisk;
         return [
-            { risk: 0, return: riskFreeRate },
-            { risk: tangency.risk * 1.5, return: riskFreeRate + (slope * (tangency.risk * 1.5)) }
+            { risk_pct: 0, return_pct: riskFreeRate },
+            { risk_pct: tRisk * 1.5, return_pct: riskFreeRate + (slope * (tRisk * 1.5)) }
         ];
     }, [tangency, riskFreeRate]);
 
-    const holdings = useMemo(() => {
-        if (!selectedPoint) return [];
-        const r = selectedPoint.risk;
-        const bond = Math.max(0, 80 - (r * 2.5));
-        const safeTech = Math.max(0, 60 - Math.abs(15 - r) * 2);
-        const growth = Math.max(0, (r * 3) - 20);
-        const total = bond + safeTech + growth;
-        return [
-            { name: "US Treasuries", pct: (bond / total) * 100, fill: "#3b82f6" },
-            { name: "Apple Inc.", pct: (safeTech / total) * 100 * 0.6, fill: "#10b981" },
-            { name: "Google", pct: (safeTech / total) * 100 * 0.4, fill: "#f59e0b" },
-            { name: "Tesla", pct: (growth / total) * 100, fill: "#6366f1" },
-        ].sort((a, b) => b.pct - a.pct);
-    }, [selectedPoint]);
-
-    const currentSharpe = useMemo(() => {
-        if (!selectedPoint) return 0;
-        return (selectedPoint.return - riskFreeRate) / selectedPoint.risk;
-    }, [selectedPoint, riskFreeRate]);
+    useKeyboardShortcuts({
+        '1': () => setActiveTab('optimizer'),
+        '2': () => setActiveTab('risk'),
+        '3': () => setActiveTab('backtest')
+    });
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-300 font-sans p-6 md:p-12">
-            <div className="max-w-7xl mx-auto space-y-8">
+
+            <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #334155; border-radius: 20px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #475569; }
+            `}</style>
+
+            <div className="max-w-7xl mx-auto space-y-6">
 
                 {/* --- HEADER --- */}
-                <header className="flex flex-col md:flex-row justify-between items-end border-b border-slate-900 pb-6">
+                <header className="flex flex-col md:flex-row justify-between items-end border-b border-slate-900 pb-6 gap-4">
                     <div>
                         <h1 className="text-3xl font-light text-white tracking-tight">
                             Portfolio <span className="font-bold text-blue-500">Navigator</span>
                         </h1>
-                        <div className="flex items-center gap-4 mt-4">
-                            <div className="flex gap-6">
-                                <button onClick={() => setViewMode('frontier')} className={`pb-2 text-sm font-medium transition-colors border-b-2 ${viewMode === 'frontier' ? 'border-blue-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>Efficient Frontier</button>
-                                <button onClick={() => setViewMode('backtest')} className={`pb-2 text-sm font-medium transition-colors border-b-2 ${viewMode === 'backtest' ? 'border-blue-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>Historical Performance</button>
-                            </div>
-
-                            {/* Hotkeys Hint */}
-                            <div className="hidden md:flex items-center gap-2 text-[10px] text-slate-600 font-mono border border-slate-800 px-2 py-1 rounded">
-                                <Keyboard size={10} />
-                                <span>HOTKEYS: [M] SIMULATE • [B] BACKTEST</span>
-                            </div>
-                        </div>
+                        <p className="text-xs text-slate-500 mt-2 font-mono">
+                            INSTITUTIONAL ANALYTICS ENGINE • V1.0.4
+                        </p>
                     </div>
 
-                    {/* Monte Carlo Button */}
-                    <div className="mb-2 md:mb-0">
-                        <button
-                            onClick={handleRunSimulation}
-                            disabled={isSimulating || viewMode === 'backtest'}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                                monteCarloData.length > 0
-                                    ? "bg-rose-500/10 text-rose-400 border border-rose-500/50 hover:bg-rose-500/20"
-                                    : "bg-slate-800 text-white hover:bg-slate-700 border border-slate-700"
-                            } ${viewMode === 'backtest' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            {isSimulating ? <Activity className="animate-spin" size={16} /> : <PlayCircle size={16} />}
-                            {isSimulating ? "Running..." : monteCarloData.length > 0 ? "Clear Simulation" : "Run Monte Carlo"}
-                        </button>
+                    {/* CONTROLS AREA */}
+                    <div className="flex flex-col items-end gap-3">
+
+                        {/* NEW: LIVE TICKER */}
+                        <LiveTicker />
+
+                        {/* TAB NAVIGATION */}
+                        <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
+                            <TabButton
+                                active={activeTab === 'optimizer'}
+                                onClick={() => setActiveTab('optimizer')}
+                                icon={<LayoutDashboard size={16} />}
+                                label="Construct"
+                            />
+                            <TabButton
+                                active={activeTab === 'risk'}
+                                onClick={() => setActiveTab('risk')}
+                                icon={<Activity size={16} />}
+                                label="Risk Lab"
+                            />
+                            <TabButton
+                                active={activeTab === 'backtest'}
+                                onClick={() => setActiveTab('backtest')}
+                                icon={<History size={16} />}
+                                label="Backtest"
+                            />
+                        </div>
                     </div>
                 </header>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-
-                    {/* --- LEFT COLUMN --- */}
-                    <div className="lg:col-span-8 space-y-6">
-                        <div className="h-[500px] w-full relative group rounded-lg overflow-hidden border border-slate-900 bg-slate-900/20">
-                            {viewMode === 'frontier' ? (
+                {/* --- TAB 1: OPTIMIZER --- */}
+                {activeTab === 'optimizer' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-300">
+                        <div className="lg:col-span-8 space-y-6">
+                            <div className="h-[520px] w-full bg-slate-900/20 rounded-lg border border-slate-900 relative">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart margin={{ top: 20, right: 20, left: -10, bottom: 20 }}>
-                                        <defs>
-                                            <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                                                <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
-                                                <stop offset="100%" stopColor="#06b6d4" stopOpacity={1} />
-                                            </linearGradient>
-                                        </defs>
                                         <CartesianGrid strokeDasharray="1 1" stroke="#1e293b" opacity={0.5} />
-                                        <XAxis type="number" dataKey="risk" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#1e293b' }} tickLine={false} domain={['auto', 'auto']} />
-                                        <YAxis type="number" dataKey="return" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#1e293b' }} tickLine={false} domain={['auto', 'auto']} />
-                                        <Tooltip content={<StockTickerTooltip />} cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '2 2', opacity: 0.5 }} wrapperStyle={{ outline: 'none' }} isAnimationActive={false} />
-
-                                        {/* Layers */}
-                                        {monteCarloData.length > 0 && <Scatter data={monteCarloData} fill="#475569" opacity={0.4} shape="circle" legendType="none" />}
-                                        <Line data={dynamicCML} type="linear" dataKey="return" stroke="#10b981" strokeWidth={1} strokeDasharray="3 3" dot={false} opacity={0.8} />
-                                        <Line data={efData} type="monotone" dataKey="return" stroke="url(#lineGradient)" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "white", stroke: "#3b82f6", strokeWidth: 2 }} />
-                                        {tangency && <Scatter data={[tangency]} fill="#10b981" stroke="#fff" strokeWidth={2} shape="diamond" />}
-                                        {selectedPoint && <Scatter data={[selectedPoint]} fill="#fff" stroke="#3b82f6" strokeWidth={3} />}
+                                        <XAxis type="number" dataKey="risk_pct" tick={{ fill: '#64748b', fontSize: 10 }} domain={['auto', 'auto']} label={{ value: 'Risk (Vol %)', position: 'insideBottom', offset: -5, fill: '#475569' }} />
+                                        <YAxis type="number" dataKey="return_pct" tick={{ fill: '#64748b', fontSize: 10 }} domain={['auto', 'auto']} label={{ value: 'Return (%)', angle: -90, position: 'insideLeft', fill: '#475569' }} />
+                                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }} />
+                                        <Line data={dynamicCML} type="linear" dataKey="return_pct" stroke="#10b981" strokeDasharray="3 3" dot={false} strokeWidth={1} name="Capital Market Line" />
+                                        <Line data={efData} type="monotone" dataKey="return_pct" stroke="#3b82f6" strokeWidth={2} dot={false} name="Efficient Frontier" />
+                                        {tangency && <Scatter data={[{ x: tangency.risk*100, y: tangency.expected_return*100 }]} fill="#10b981" name="Tangency Portfolio" />}
+                                        {selectedPoint && <Scatter data={[{ x: selectedPoint.risk, y: selectedPoint.return }]} fill="#fff" stroke="#3b82f6" strokeWidth={2} name="Selected" />}
                                     </LineChart>
                                 </ResponsiveContainer>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
+                                    <div className="flex justify-between mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <Sliders size={16} className="text-blue-400" />
+                                            <span className="text-sm font-semibold text-slate-200">Risk Tolerance</span>
+                                        </div>
+                                        <span className="font-mono text-white">{riskTolerance}%</span>
+                                    </div>
+                                    <input type="range" min="0" max="100" value={riskTolerance} onChange={handleSliderChange} className="w-full h-1.5 bg-slate-800 rounded-lg accent-blue-500 cursor-pointer" />
+                                </div>
+                                <RiskFreeRateControl value={riskFreeRate} onChange={() => {}} />
+                            </div>
+
+                            <ConstraintsPanel constraints={constraints} onChange={setConstraints} />
+                        </div>
+
+                        <div className="lg:col-span-4 flex flex-col gap-4 h-[auto] min-h-[640px]">
+                            <div className="grid grid-cols-2 gap-3 shrink-0">
+                                <MetricBox label="Sharpe Ratio" value={tangency ? tangency.sharpe_ratio.toFixed(2) : 0} color="text-white" />
+                                <MetricBox label="Exp. Return" value={selectedPoint ? selectedPoint.return.toFixed(2) : 0} isPercent color="text-emerald-400" />
+                                <MetricBox label="Risk (Vol)" value={selectedPoint ? selectedPoint.risk.toFixed(2) : 0} isPercent color="text-rose-400" />
+                                <MetricBox label="Risk Free Rate" value={riskFreeRate.toFixed(2)} isPercent color="text-slate-400" />
+                            </div>
+
+                            <div className="bg-slate-900/30 rounded-xl border border-slate-700/50 p-4 flex flex-col flex-1 min-h-0">
+                                <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-2 shrink-0">
+                                    <div className="flex items-center gap-2">
+                                        <Table2 size={16} className="text-slate-500" />
+                                        <h3 className="text-sm font-bold text-slate-300">ALLOCATION</h3>
+                                    </div>
+                                </div>
+                                <div className="overflow-y-auto pr-2 flex-1 custom-scrollbar">
+                                    <AssetAllocationTable weights={selectedPoint ? selectedPoint.weights : []} />
+                                    <div className="mt-6 pt-6 border-t border-slate-800">
+                                        <AssetAllocationPie data={selectedPoint ? selectedPoint.weights : []} />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB 2: RISK LAB --- */}
+                {activeTab === 'risk' && (
+                    <div className="animate-in slide-in-from-right-4 duration-300 space-y-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <VaRCard risk={varData ? varData.historical_var : 0} portfolioReturn={0} />
+                            <ScenarioAnalysis
+                                customScenarios={scenarioData}
+                                baselineReturn={selectedPoint ? selectedPoint.return : 0}
+                            />
+                        </div>
+                        <div className="bg-slate-900/20 border border-slate-900 rounded-xl p-6">
+                            <h3 className="text-lg font-light text-white mb-4 flex items-center gap-2">
+                                <TrendingUp size={18} className="text-blue-500" /> Monte Carlo Projection
+                            </h3>
+                            {simulationData ? (
+                                <MonteCarloChart data={simulationData} />
                             ) : (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={backtestData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                        <XAxis dataKey="month" tick={{fill: '#64748b'}} />
-                                        <YAxis tick={{fill: '#64748b'}} />
-                                        <Tooltip contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} />
-                                        <Area type="monotone" dataKey="portfolio" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} />
-                                    </AreaChart>
-                                </ResponsiveContainer>
+                                <div className="h-[400px] flex items-center justify-center text-slate-500">
+                                    <Activity className="animate-spin mr-2" /> Generating 1,000 simulations...
+                                </div>
                             )}
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 backdrop-blur-sm">
-                                <div className="flex justify-between items-center mb-4">
-                                    <div className="flex items-center gap-2">
-                                        <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-400"><Sliders size={16} /></div>
-                                        <h3 className="text-sm font-semibold text-slate-200">Risk Tolerance</h3>
-                                    </div>
-                                    <span className="text-2xl font-mono text-white tracking-tight">
-                                        <AnimatedNumber value={riskTolerance} format={v => v.toFixed(0)} />%
-                                    </span>
-                                </div>
-                                <input type="range" min="0" max="100" value={riskTolerance} onChange={handleSliderChange} className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" />
-                            </div>
-                            <RiskFreeRateControl value={riskFreeRate} onChange={setRiskFreeRate} />
-                        </div>
                     </div>
+                )}
 
-                    {/* --- RIGHT COLUMN --- */}
-                    <div className="lg:col-span-4 space-y-6">
-                        <div className="grid grid-cols-2 gap-3">
-                            <MetricBox label="Sharpe Ratio" value={currentSharpe.toFixed(2)} color="text-white" bg="bg-blue-900/20" border="border-blue-900/50" />
-                            <MetricBox label="Exp. Return" value={selectedPoint ? `${selectedPoint.return.toFixed(2)}%` : "-"} color="text-emerald-400" />
-                            <MetricBox label="Volatility" value={selectedPoint ? `${selectedPoint.risk.toFixed(2)}%` : "-"} color="text-rose-400" />
-                            <MetricBox label="Risk Free Rate" value={`${riskFreeRate.toFixed(2)}%`} color="text-slate-400" />
-                        </div>
-                        <div className="bg-slate-900/30 rounded-xl border border-slate-700/50 p-4">
-                            <div className="flex items-center gap-2 mb-4 border-b border-slate-800 pb-2">
-                                <PieIcon size={16} className="text-slate-500" />
-                                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wide">Target Allocation</h3>
-                            </div>
-                            <AssetAllocationPie data={holdings} />
-                        </div>
+                {/* --- TAB 3: BACKTEST --- */}
+                {activeTab === 'backtest' && (
+                    <div className="animate-in slide-in-from-right-4 duration-300">
+                        <BacktestChart weights={selectedPoint ? selectedPoint.weights : []} />
                     </div>
-                </div>
-
-                {/* --- BOTTOM SECTION --- */}
-                <div className="border-t border-slate-900 pt-8">
-                    <h2 className="text-xl font-light text-white mb-6 flex items-center gap-2">
-                        <Activity className="text-rose-500" /> Risk Intelligence
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <VaRCard risk={selectedPoint ? selectedPoint.risk : 0} portfolioReturn={selectedPoint ? selectedPoint.return : 0} />
-                        <ScenarioAnalysis selectedRisk={selectedPoint ? selectedPoint.risk : 10} />
-                    </div>
-                </div>
+                )}
             </div>
         </div>
     );
 }
 
-// UI Helper with Animation
-function MetricBox({ label, value, color, bg = "bg-slate-900/30", border = "border-slate-800" }) {
-    const numValue = parseFloat(value);
-    const suffix = value.toString().includes('%') ? '%' : '';
-    const isNumber = !isNaN(numValue);
+// --- HELPERS ---
 
+function TabButton({ active, onClick, icon, label }) {
+    return (
+        <button
+            onClick={onClick}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                active
+                    ? "bg-slate-800 text-white shadow-sm border border-slate-700"
+                    : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/50"
+            }`}
+        >
+            {icon} {label}
+        </button>
+    );
+}
+
+function MetricBox({ label, value, color, bg = "bg-slate-900/30", border = "border-slate-800", isPercent = false }) {
+    const numValue = parseFloat(value) || 0;
     return (
         <div className={`${bg} p-4 rounded-xl border ${border} transition-all hover:bg-slate-800/50`}>
             <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 font-semibold">{label}</div>
             <div className={`text-2xl font-mono font-medium tracking-tighter ${color}`}>
-                {isNumber ? (
-                    <>
-                        <AnimatedNumber value={numValue} />
-                        {suffix}
-                    </>
-                ) : (
-                    value
-                )}
+                <AnimatedNumber value={numValue} />{isPercent ? '%' : ''}
             </div>
         </div>
     );

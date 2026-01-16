@@ -1,11 +1,14 @@
 import React from 'react';
 import LandingPage from './components/LandingPage.jsx';
+import {PortfolioProvider} from "./context/PortfolioContext.jsx";
 
 function App() {
     return (
-        <div>
-            <LandingPage />
-        </div>
+        <PortfolioProvider>
+            <div>
+                <LandingPage/>
+            </div>
+        </PortfolioProvider>
     );
 }
 
