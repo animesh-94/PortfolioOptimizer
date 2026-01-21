@@ -3,163 +3,131 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { Calendar, TrendingUp, TrendingDown, Activity, AlertCircle } from 'lucide-react';
-import { portfolioApi } from '../services/api';
-import AnimatedNumber from './AnimatedNumber';
+
+// Replace this with your actual API service or direct fetch
+const API_URL = "https://d1l8649jpdxmxv.cloudfront.net/api/backtest";
 
 export default function BacktestChart({ weights }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [timeRange, setTimeRange] = useState('1Y'); // 1Y, 3Y, 5Y, ALL
+    const [timeRange, setTimeRange] = useState('ALL');
 
-    // --- FETCH DATA ---
     useEffect(() => {
-        let mounted = true;
+        // If weights haven't been calculated in the Construct tab yet, don't fetch
         if (!weights || weights.length === 0) return;
 
         const runBacktest = async () => {
             setLoading(true);
             setError(null);
             try {
-                const result = await portfolioApi.getBacktest(weights, timeRange);
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ weights, range: timeRange })
+                });
 
-                if (mounted) {
-                    setData(result);
-                }
+                if (!response.ok) throw new Error(`Server Error: ${response.status}`);
+
+                const result = await response.json();
+
+                // --- DATA TRANSFORMATION ---
+                // We map the C++ arrays (equity_curve, drawdown) into Recharts objects
+                const formattedHistory = result.equity_curve.map((val, i) => ({
+                    date: `Day ${i}`,
+                    value: val * 10000, // Normalize to $10,000 initial capital
+                    drawdown: (result.drawdown[i] * 100).toFixed(2) // Convert to percentage
+                }));
+
+                setData({
+                    history: formattedHistory,
+                    metrics: {
+                        totalReturn: (result.equity_curve[result.equity_curve.length - 1] - 1) * 100,
+                        cagr: result.cagr * 100,
+                        maxDrawdown: result.max_drawdown * 100,
+                        sharpe: result.cagr / Math.abs(result.max_drawdown || 1) // Basic Sharpe estimate
+                    }
+                });
             } catch (err) {
-                if (mounted) {
-                    console.error("Backtest failed:", err);
-                    setError("Could not retrieve historical data.");
-                }
+                console.error("Backtest fetch error:", err);
+                setError("Failed to connect to Quant Engine.");
             } finally {
-                if (mounted) setLoading(false);
+                setLoading(false);
             }
         };
 
         runBacktest();
-        return () => { mounted = false; };
     }, [weights, timeRange]);
 
-    // --- METRICS CALCULATION (Safe fallback) ---
-    const metrics = useMemo(() => {
-        if (!data) return { totalReturn: 0, cagr: 0, maxDrawdown: 0, sharpe: 0 };
-        return data.metrics || { totalReturn: 0, cagr: 0, maxDrawdown: 0, sharpe: 0 };
-    }, [data]);
+    // --- RENDER HELPERS ---
+    if (loading) return (
+        <div className="h-[450px] flex flex-col items-center justify-center bg-slate-900/20 border border-slate-800 rounded-xl">
+            <Activity className="animate-spin text-blue-500 mb-4" size={48} />
+            <span className="text-slate-400 font-mono tracking-widest">RUNNING SIMULATION...</span>
+        </div>
+    );
 
-    // --- LOADING STATE ---
-    if (loading) {
-        return (
-            <div className="h-[450px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-slate-500">
-                <Activity className="animate-spin mb-4 text-blue-500" size={48} />
-                <span className="font-mono text-sm tracking-widest uppercase">Running Historical Simulation...</span>
-            </div>
-        );
-    }
+    if (error) return (
+        <div className="h-[450px] flex flex-col items-center justify-center text-rose-500 border border-slate-800 rounded-xl">
+            <AlertCircle size={48} className="mb-4" />
+            <p>{error}</p>
+            <button onClick={() => window.location.reload()} className="mt-4 text-xs text-slate-400 underline">Retry Connection</button>
+        </div>
+    );
 
-    // --- ERROR STATE ---
-    if (error) {
-        return (
-            <div className="h-[450px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-rose-500">
-                <AlertCircle className="mb-4" size={48} />
-                <span className="font-medium">{error}</span>
-                <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-slate-800 rounded hover:bg-slate-700 text-slate-300 text-sm">Retry</button>
-            </div>
-        );
-    }
-
-    // --- EMPTY STATE ---
-    if (!data || !data.history) {
-        return (
-            <div className="h-[450px] w-full bg-slate-900/20 border border-slate-900 rounded-xl flex flex-col items-center justify-center text-slate-600">
-                <Calendar className="mb-4 opacity-50" size={48} />
-                <span>Select a portfolio on the "Construct" tab to view backtest.</span>
-            </div>
-        );
-    }
+    if (!data || !data.history) return (
+        <div className="h-[450px] flex flex-col items-center justify-center text-slate-500 border border-dashed border-slate-800 rounded-xl">
+            <Calendar className="mb-4 opacity-20" size={48} />
+            <p>Select weights in the "Construct" tab to view backtest.</p>
+        </div>
+    );
 
     return (
-        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-
+        <div className="space-y-6">
             {/* 1. METRICS CARDS */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <SummaryCard
-                    label="Total Return"
-                    value={metrics.totalReturn}
-                    icon={<TrendingUp size={16} />}
-                    color="text-emerald-400"
-                />
-                <SummaryCard
-                    label="CAGR"
-                    value={metrics.cagr}
-                    icon={<Activity size={16} />}
-                    color="text-blue-400"
-                />
-                <SummaryCard
-                    label="Max Drawdown"
-                    value={metrics.maxDrawdown}
-                    icon={<TrendingDown size={16} />}
-                    color="text-rose-400"
-                />
-                <SummaryCard
-                    label="Sharpe Ratio"
-                    value={metrics.sharpe}
-                    isPercent={false}
-                    color="text-white"
-                />
+                <SummaryCard label="Total Return" value={data.metrics.totalReturn} color="text-emerald-400" />
+                <SummaryCard label="CAGR" value={data.metrics.cagr} color="text-blue-400" />
+                <SummaryCard label="Max Drawdown" value={data.metrics.maxDrawdown} color="text-rose-400" />
+                <SummaryCard label="Sharpe Ratio" value={data.metrics.sharpe} isPercent={false} color="text-white" />
             </div>
 
-            {/* 2. MAIN CHARTS CONTAINER */}
-            <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-6">
-
-                {/* Header & Controls */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                    <div>
-                        <h3 className="text-lg font-light text-white flex items-center gap-2">
-                            <Calendar size={18} className="text-blue-500" />
-                            Equity Curve
-                        </h3>
-                        <p className="text-xs text-slate-500">Hypothetical growth of $10,000 investment</p>
-                    </div>
-                    <div className="flex bg-slate-950/50 rounded-lg p-1 border border-slate-800">
-                        {['1Y', '3Y', '5Y', 'ALL'].map(range => (
+            {/* 2. EQUITY CURVE CHART */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-white font-light">Historical Growth ($10k Investment)</h3>
+                    <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
+                        {['1Y', '3Y', '5Y', 'ALL'].map(r => (
                             <button
-                                key={range}
-                                onClick={() => setTimeRange(range)}
-                                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                                    timeRange === range
-                                        ? 'bg-blue-600 text-white shadow'
-                                        : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-                                }`}
+                                key={r}
+                                onClick={() => setTimeRange(r)}
+                                className={`px-3 py-1 text-[10px] rounded ${timeRange === r ? 'bg-blue-600 text-white' : 'text-slate-500'}`}
                             >
-                                {range}
+                                {r}
                             </button>
                         ))}
                     </div>
                 </div>
 
-                {/* CHART 1: EQUITY CURVE (Fixed Height) */}
-                <div className="w-full mb-2" style={{ height: 280 }}>
+                <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={data.history} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+                        <AreaChart data={data.history}>
                             <defs>
                                 <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
                                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                             <XAxis dataKey="date" hide />
                             <YAxis
-                                domain={['auto', 'auto']}
-                                tick={{ fill: '#64748b', fontSize: 10 }}
+                                tick={{fill: '#64748b', fontSize: 10}}
                                 tickFormatter={(val) => `$${(val/1000).toFixed(0)}k`}
                                 axisLine={false}
-                                tickLine={false}
                             />
                             <Tooltip
-                                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
-                                formatter={(val) => [`$${val.toFixed(2)}`, "Portfolio Value"]}
-                                labelStyle={{ color: '#94a3b8', marginBottom: '0.5rem' }}
+                                contentStyle={{backgroundColor: '#0f172a', borderColor: '#1e293b'}}
+                                itemStyle={{color: '#3b82f6'}}
                             />
                             <Area
                                 type="monotone"
@@ -167,46 +135,22 @@ export default function BacktestChart({ weights }) {
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 fill="url(#colorEquity)"
-                                activeDot={{ r: 6, fill: "#fff" }}
                             />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
 
-                {/* CHART 2: DRAWDOWN (Fixed Height, Auto Domain) */}
-                <div className="w-full border-t border-slate-800 pt-2 relative" style={{ height: 100 }}>
-                    <p className="absolute top-2 left-2 text-[10px] text-slate-500 font-mono">DRAWDOWN</p>
+                {/* 3. MINI DRAWDOWN CHART */}
+                <div className="h-[80px] w-full border-t border-slate-800 mt-4 pt-2">
+                    <p className="text-[10px] text-slate-600 font-mono mb-1 uppercase">Drawdown %</p>
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={data.history} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                            <defs>
-                                <linearGradient id="colorDD" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1}/>
-                                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0.3}/>
-                                </linearGradient>
-                            </defs>
-                            <XAxis
-                                dataKey="date"
-                                tick={{ fill: '#64748b', fontSize: 10 }}
-                                minTickGap={50}
-                                axisLine={false}
-                                tickLine={false}
-                            />
-                            <YAxis
-                                hide
-                                domain={['auto', 0]} // Auto-scale for deep crashes
-                            />
+                        <AreaChart data={data.history}>
+                            <YAxis hide domain={['auto', 0]} />
                             <Tooltip
-                                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#ef4444', color: '#ef4444' }}
-                                formatter={(val) => [`${(val * 100).toFixed(2)}%`, "Drawdown"]}
-                                labelStyle={{ display: 'none' }}
+                                contentStyle={{backgroundColor: '#0f172a', borderColor: '#ef4444'}}
+                                itemStyle={{color: '#ef4444'}}
                             />
-                            <Area
-                                type="monotone"
-                                dataKey="drawdown"
-                                stroke="#ef4444"
-                                strokeWidth={1}
-                                fill="url(#colorDD)"
-                            />
+                            <Area type="monotone" dataKey="drawdown" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
@@ -215,21 +159,13 @@ export default function BacktestChart({ weights }) {
     );
 }
 
-// Fixed SummaryCard (Handles Negative Signs correctly)
-function SummaryCard({ label, value, icon, color, isPercent = true }) {
+function SummaryCard({ label, value, color, isPercent = true }) {
     return (
-        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition-all">
-            <div className="flex items-center gap-2 mb-2 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                {icon} {label}
-            </div>
-            <div className={`text-2xl font-mono font-medium ${color}`}>
-                {/* Explicit sign handling */}
-                {value > 0 && isPercent ? "+" : ""}
-                {value < 0 ? "-" : ""}
-
-                <AnimatedNumber value={Math.abs(value)} />
-                {isPercent ? "%" : ""}
-            </div>
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{label}</p>
+            <p className={`text-xl font-mono ${color}`}>
+                {value >= 0 && isPercent ? "+" : ""}{value.toFixed(2)}{isPercent ? "%" : ""}
+            </p>
         </div>
     );
 }

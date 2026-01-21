@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-export default function usePortfolioSocket(url = 'ws://localhost:8080/ws') {
+export default function usePortfolioSocket(url = 'wss://d1l8649jpdxmxv.cloudfront.net/realtime') {
     const [status, setStatus] = useState('disconnected'); // 'connecting', 'connected', 'disconnected'
     const [metrics, setMetrics] = useState({
         value: 1000000, // $1M Start

@@ -8,7 +8,7 @@ export default defineConfig({
     proxy: {
       // This proxies requests starting with /api to your C++ backend
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'https://d32ar9oqez65gn.cloudfront.net',
         changeOrigin: true,
         secure: false,
       }

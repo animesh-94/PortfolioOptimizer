@@ -1,4 +1,4 @@
-const API_BASE = "/api";
+const API_BASE = "https://d1l8649jpdxmxv.cloudfront.net/api";
 
 const postData = async (endpoint, payload = {}) => {
     try {
