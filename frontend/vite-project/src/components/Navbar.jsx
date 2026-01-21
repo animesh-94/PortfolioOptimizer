@@ -52,12 +52,12 @@ export default function Navbar({ onLaunchTerminal }) {
                     {time.toLocaleTimeString()}
                 </span>
 
-                <button
-                    onClick={onLaunchTerminal}
-                    className="bg-blue-600 text-white hover:bg-blue-500 px-5 py-2 rounded-full font-bold text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-blue-900/20"
-                >
-                    Launch Terminal
-                </button>
+                {/*<button*/}
+                {/*    onClick={onLaunchTerminal}*/}
+                {/*    className="bg-blue-600 text-white hover:bg-blue-500 px-5 py-2 rounded-full font-bold text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-blue-900/20"*/}
+                {/*>*/}
+                {/*    Launch Terminal*/}
+                {/*</button>*/}
             </div>
         </nav>
     );

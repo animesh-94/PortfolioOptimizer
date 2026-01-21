@@ -341,15 +341,40 @@ export default function EfficientFrontierDashboard() {
                                         initial={{ opacity: 0, scale: 0.95 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         transition={{ duration: 0.5, delay: 0.2 }}
-                                        className="bg-slate-900/50 rounded-xl border border-slate-800 p-4 md:p-6 flex flex-col"
+                                        className="bg-slate-900/40 backdrop-blur-md rounded-2xl border border-slate-800 p-4 md:p-6 flex flex-col shadow-2xl"
                                         style={{ maxHeight: '600px' }}
                                     >
-                                        <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-widest border-b border-slate-800 pb-4 flex-shrink-0">Your Portfolio</h3>
-                                        <div className="flex-1 overflow-y-auto pr-2">
-                                            <AssetAllocationTable weights={selectedPoint ? selectedPoint.weights : []} />
-                                            <div className="mt-6">
-                                                <AssetAllocationPie data={selectedPoint ? selectedPoint.weights : []} />
+                                        {/* Header with Icon for Visual Consistency */}
+                                        <div className="flex items-center gap-3 mb-4 border-b border-slate-800 pb-4 flex-shrink-0">
+                                            <div className="p-1.5 bg-blue-500/10 rounded-md">
+                                                <Wallet size={16} className="text-blue-500" />
                                             </div>
+                                            <h3 className="text-sm font-bold text-white uppercase tracking-widest">
+                                                Your Portfolio
+                                            </h3>
+                                        </div>
+
+                                        {/* Scrollable Content Area */}
+                                        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                                            {/* Table View */}
+                                            <AssetAllocationTable
+                                                weights={selectedPoint ? selectedPoint.weights : []}
+                                            />
+
+                                            {/* Visual Chart View */}
+                                            <div className="mt-8 pt-6 border-t border-slate-800/50">
+                                                <AssetAllocationPie
+                                                    data={selectedPoint ? selectedPoint.weights : []}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Optional Footer/Meta info */}
+                                        <div className="mt-4 pt-3 border-t border-slate-800/30 flex justify-between items-center shrink-0">
+                                            <span className="text-[10px] text-slate-600 uppercase font-mono">Dynamic Weights</span>
+                                            <span className="text-[10px] text-blue-500 font-bold uppercase font-mono tracking-tighter">
+            {selectedPoint ? 'Optimized' : 'Rebalancing...'}
+        </span>
                                         </div>
                                     </motion.div>
                                 </div>

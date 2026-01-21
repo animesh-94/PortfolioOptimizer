@@ -55,22 +55,22 @@ export default function NewLandingPage() {
                 </div>
 
                 <div className="flex items-center gap-6">
-                    <div className="hidden md:flex items-center gap-4 bg-slate-900/40 border border-slate-800 rounded-full px-4 py-1.5 transition-all hover:border-slate-700">
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                            <Percent size={12} className="text-blue-500" />
-                            <span>RF Rate</span>
-                        </div>
-                        <input
-                            type="range" min="0" max="10" step="0.1"
-                            value={riskFreeRate}
-                            onChange={(e) => setRiskFreeRate(parseFloat(e.target.value))}
-                            className="w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                        />
-                        <span className="text-xs font-mono text-white w-8 text-right font-bold">{riskFreeRate.toFixed(1)}%</span>
-                    </div>
+                    {/*<div className="hidden md:flex items-center gap-4 bg-slate-900/40 border border-slate-800 rounded-full px-4 py-1.5 transition-all hover:border-slate-700">*/}
+                    {/*    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">*/}
+                    {/*        <Percent size={12} className="text-blue-500" />*/}
+                    {/*        <span>RF Rate</span>*/}
+                    {/*    </div>*/}
+                    {/*    <input*/}
+                    {/*        type="range" min="0" max="10" step="0.1"*/}
+                    {/*        value={riskFreeRate}*/}
+                    {/*        onChange={(e) => setRiskFreeRate(parseFloat(e.target.value))}*/}
+                    {/*        className="w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"*/}
+                    {/*    />*/}
+                    {/*    <span className="text-xs font-mono text-white w-8 text-right font-bold">{riskFreeRate.toFixed(1)}%</span>*/}
+                    {/*</div>*/}
 
-                    <div className="flex items-center gap-6 border-l border-slate-800 pl-6">
-                        <span className="hidden lg:block text-[10px] font-mono text-slate-500 uppercase tracking-[0.2em]">{time.toLocaleTimeString()}</span>
+                    <div className="flex items-center gap-6">
+                        {/*<span className="hidden lg:block text-[10px] font-mono text-slate-500 uppercase tracking-[0.2em]">{time.toLocaleTimeString()}</span>*/}
                         <button
                             onClick={() => navigate('/dashboard')}
                             className="bg-blue-600 text-white hover:bg-blue-500 px-5 py-2 rounded-full font-bold text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-blue-900/20 whitespace-nowrap active:scale-95"
