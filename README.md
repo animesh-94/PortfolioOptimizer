@@ -4,6 +4,7 @@
 
 Portfolio Optimizer is a **high-performance financial analysis engine** designed to bridge the gap between **quantitative finance theory** and **production-grade speed**. Built on a modernized **C++ core** using **Eigen** and **cpp-httplib**, the system achieves **10–100× speedups** over traditional Python/NumPy pipelines, enabling **near real-time simulation of 50,000 Monte Carlo paths**.
 
+**Deployment** : http://portfolio-optimizer-frontend.s3-website.eu-north-1.amazonaws.com/
 ---
 
 ## 🚀 Key Features
@@ -45,19 +46,23 @@ C++ is used for **raw computational throughput**, particularly for **matrix alge
 ## 🏗️ System Architecture
 
 ```mermaid
-graph TD;
-    React[Portfolio Navigator Dashboard] <-->|REST / JSON| Server[httplib Server];
+graph TD
+    React["Portfolio Navigator Dashboard"] <-->|"REST / JSON"| Server["httplib Server"]
 
-    subgraph Backend System
-        Server --> Quant[Quant Engine (Pure Math Modules)];
-        Quant --> Data[Eigen Matrices (Static Cache)];
+    subgraph BackendSystem["Backend System"]
+        Server --> QuantEngine["Quant Engine"]
+        QuantEngine --> DataCache["Eigen Matrices (Static Cache)"]
     end
 
-    subgraph Quant[⚡ High-Performance Core]
-        Opt[Optimizer<br/>(Cholesky Solvers)];
-        Risk[RiskMetrics<br/>(VaR / Monte Carlo)];
-        Backtest[Backtest<br/>(Equity Curves)];
+    subgraph QuantCore["High-Performance Core"]
+        Optimizer["Optimizer (Cholesky Solvers)"]
+        RiskMetrics["Risk Metrics (VaR / Monte Carlo)"]
+        Backtest["Backtesting (Equity Curves)"]
     end
+
+    QuantEngine --> Optimizer
+    QuantEngine --> RiskMetrics
+    QuantEngine --> Backtest
 ```
 
 **Design Philosophy:**
